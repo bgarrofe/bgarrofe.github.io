@@ -1,0 +1,895 @@
+{
+  "standard_id": "WCM-SNOWFLAKE-NAMING",
+  "intent": "The single canonical WCM Snowflake naming contract for future object naming, SQL and AI assistance; no automatic DDL or changes to existing objects.",
+  "version": "1.3.9",
+  "date": "2026-11-18",
+  "status": "PROPOSED_FOR_TEAM_REVIEW; effective date not yet set",
+  "supersedes": "1.3.8",
+  "source_of_truth": {
+    "canonical_file": "WCM_Snowflake_Naming_Contract_v1.3.9.json",
+    "derived_files": [
+      "WCM_Snowflake_Naming_AI_Instructions_v1.3.9.md",
+      "WCM_Snowflake_Naming_Conformance_Check_v1.3.9.sql",
+      "WCM_Snowflake_Naming_Standard_v1.3.9_20261118.pdf"
+    ],
+    "precedence": "Canonical JSON is authoritative. PDF and Markdown explain the same contract. Existing SQL must still use actual deployed names."
+  },
+  "scope": {
+    "applies_immediately_to": [
+      "naming proposals and AI-generated DDL for the recommended standard during review; any DDL remains subject to normal engineering approval",
+      "new WCM-owned objects after the naming standard is formally approved and the effective date is announced"
+    ],
+    "applies_gradually_to": "Existing internal objects: plan case-by-case renames with dependency analysis and regression testing; never assume DEV renames are free.",
+    "out_of_scope": [
+      "Replica schemas keep external source names, including INDATADB_MAIN and INDATADB_MARKETVALUES.",
+      "RIDGELINE-owned objects, including RLPROD_, RLMAPPING_ and RLSTAGING_ patterns and RIDGELINE integration procedures.",
+      "SF2SF-owned framework objects, even when procedures reside outside SF2SF schemas.",
+      "Vendor-generated and existing legacy objects, until an intentionally scoped migration.",
+      "Column naming, which is not defined by this object naming contract."
+    ],
+    "adoption_date": null,
+    "activation_rule": "Proposed convention for new WCM-owned objects. Adoption follows team approval; current objects are not automatically renamed."
+  },
+  "existing_object_policy": {
+    "rule": "Existing deployed and third-party object names are not automatically noncompliant or subject to rename. Reference their current names in executable SQL. New names are examples until an explicitly planned migration.",
+    "migration": "Inventory current objects and dependencies, update consumers and grants as needed, verify behavior, and cut over deliberately. No automatic DROP or rename is authorized by this standard."
+  },
+  "grammar": {
+    "fully_qualified": "<DATABASE>.<SCHEMA>.<OBJECT>",
+    "database": "environment: DEV or PROD",
+    "schema": "Use business-domain schemas, MAPPINGS for shared crosswalks, MAPPINGS_APP for app operations, and BI for consumer-facing outputs.",
+    "data": "<TYPE>_<PURPOSE>_<SUBJECT>",
+    "source_data": "<TYPE>_SRC_<ORIGIN>[_<CHANNEL>]_<SUBJECT>",
+    "process": "<TYPE>_<ACTION>_<SUBJECT>",
+    "support": "<TYPE>_<SUBJECT>",
+    "account_level": "<TYPE>_<SUBJECT>[_<ENV>]",
+    "client_view": "<DATABASE>.BI.<BUSINESS_NAME>",
+    "case": "UPPER_SNAKE_CASE; unquoted identifiers; A-Z, 0-9 and single separators only (no leading, trailing or repeated underscores)",
+    "schema_exceptions": "BI consumer-facing interfaces use plain names; MAPPINGS holds shared MAP-purpose datasets; MAPPINGS_APP holds app internals.",
+    "identifier_length": "Snowflake allows 255 characters per identifier; no smaller WCM length cap. The three-part qualified name has no extra combined 255-character cap."
+  },
+  "client_layer": {
+    "schema": "BI",
+    "pattern": "<DATABASE>.BI.<BUSINESS_NAME> for consumer-facing views",
+    "object_type": "view (preferred for new consumer-facing BI interfaces)",
+    "rule": "Use BI for consumer-facing business interfaces, normally plain-name views. Existing BI tables, dynamic tables and procedures remain as deployed. New internal pipelines do not read BI.",
+    "example": "PROD.BI.MONTH_END_AUM",
+    "internal_code_rule": "New WCM internal calculations, refresh procedures, tasks and transformation SQL must read the owning CORE/DATALAKE/domain objects, not PROD.BI or DEV.BI consumer-facing interfaces. Existing dependencies are not silently rewritten."
+  },
+  "physical_types": {
+    "TBL": {
+      "object": "table",
+      "class": "data"
+    },
+    "VW": {
+      "object": "view",
+      "class": "data"
+    },
+    "DYN": {
+      "object": "dynamic table",
+      "class": "data"
+    },
+    "MVW": {
+      "object": "materialized view",
+      "class": "data"
+    },
+    "SP": {
+      "object": "stored procedure",
+      "class": "process"
+    },
+    "TASK": {
+      "object": "task",
+      "class": "process"
+    },
+    "PIPE": {
+      "object": "pipe",
+      "class": "process"
+    },
+    "TMP": {
+      "object": "temporary table",
+      "class": "support"
+    },
+    "FN": {
+      "object": "function / UDF",
+      "class": "support"
+    },
+    "STREAM": {
+      "object": "stream",
+      "class": "support"
+    },
+    "STAGE": {
+      "object": "stage",
+      "class": "support"
+    },
+    "FF": {
+      "object": "file format",
+      "class": "support"
+    },
+    "SEQ": {
+      "object": "sequence",
+      "class": "support"
+    },
+    "ALERT": {
+      "object": "alert",
+      "class": "support"
+    },
+    "TAG": {
+      "object": "governance tag",
+      "class": "support"
+    },
+    "POLICY": {
+      "object": "masking, row access or other schema-level policy",
+      "class": "support"
+    },
+    "ROLE": {
+      "object": "role",
+      "class": "account"
+    },
+    "WH": {
+      "object": "warehouse",
+      "class": "account"
+    },
+    "INTEG": {
+      "object": "integration",
+      "class": "account"
+    }
+  },
+  "data_purposes": {
+    "SRC": "incoming data or a normalized source-facing view of it; always followed by the origin token",
+    "CALC": "intermediate business logic or its stored result; not the governed consumer contract",
+    "FACT": "approved consumer-facing measurement at a documented grain, even if computed or covering many years",
+    "HIST": "intentionally preserved earlier versions, calculation states, or provenance",
+    "DIM": "descriptive business entity with analytical attributes",
+    "LOOKUP": "small approved list that decodes a code into a label, type, or status",
+    "MAP": "crosswalk that links one identifier to another",
+    "CFG": "settings and parameters that change how a process runs",
+    "AUDIT": "run history, validation results, and reconciliation evidence"
+  },
+  "action_verbs": {
+    "verbs": {
+      "LOAD": "bring data in from outside Snowflake",
+      "REFRESH": "recompute a result from its sources; safe to rerun",
+      "VALIDATE": "compare or reconcile; writes evidence, not business data",
+      "PUBLISH": "promote an approved result into its FACT or DIM object",
+      "MONITOR": "inspect health or state and record findings",
+      "NOTIFY": "send an alert or message",
+      "ARCHIVE": "move data to long-term storage",
+      "PRUNE": "delete data that is past retention",
+      "RUN": "coordinate or execute a workflow consisting of multiple dependent steps"
+    },
+    "applies_to": "Second token of SP_, TASK_ and PIPE_ process names.",
+    "new_verb": "Reuse a listed verb when it accurately describes the action. Distinct uncovered operations may be proposed with a definition; do not silently invent synonymous verbs.",
+    "task_procedure_pairing": {
+      "rule": "For a new single-purpose task that calls one procedure, use TASK_<ACTION>_<SUBJECT> and SP_<ACTION>_<SUBJECT> with the same ACTION and SUBJECT; example: TASK_REFRESH_MODEL_AUM calls SP_REFRESH_MODEL_AUM.",
+      "workflow": "When the task and procedure both coordinate several steps, use TASK_RUN_<WORKFLOW> and SP_RUN_<WORKFLOW>. This is a naming preference for new matched pairs, not a requirement to rename existing working tasks.",
+      "existing_exception": "DEV.AUM.TASK_REFRESH_AUM calls DEV.AUM.SP_REFRESH_MODEL_AUM; their deployed names remain unchanged."
+    }
+  },
+  "subject_rules": [
+    "For a dataset or collection, use plural subjects: MODEL_ACCOUNTS, ETF_MARKET_VALUES, APEX_VALUATIONS, ACCOUNT_STATUSES.",
+    "For a business measure or aggregate, retain singular terms: MODEL_AUM, MONTH_END_AUM. APEX_DAILY_VALUE is a specifically approved source-term exception.",
+    "Preserve established acronyms AUM, ETF, SEI, APEX, WRAP. Use full ACCOUNT rather than ACCT in new names.",
+    "Do not repeat type, purpose, environment, database or schema tokens in the subject. Do not pluralize action verbs."
+  ],
+  "source_origin_policy": {
+    "rule": "ORIGIN represents the named producing source system or accountable data supplier. CHANNEL is an optional separately identified ingestion path. File forwarding or uploading alone does not establish the original producer.",
+    "origins": {
+      "external supplier": "the supplier's name, for example SEI or FACTSET",
+      "replicated source system": "the system the replica comes from, for example INDATA",
+      "another Snowflake domain": "that domain's schema name, for example RIDGELINE; create an SRC object only when the data must be reshaped, otherwise read the other domain's FACT_ or DIM_ object directly",
+      "WCM-supplied or WCM-maintained files": "WCM may be the source for internally compiled files; verify origin/ownership before documenting WCM as the original creator. WCM distribution alone proves only delivery."
+    },
+    "channel": {
+      "words": [
+        "WCMUPLOADER",
+        "SFTP",
+        "API",
+        "REPLICATION"
+      ],
+      "uploader": "WCMUPLOADER identifies the WCM uploader application, not who compiled the original file.",
+      "rule": "Use CHANNEL after verified ORIGIN when it conveys the ingestion path, e.g. WCMUPLOADER. WCM+WCMUPLOADER may both appear after WCM source ownership is verified."
+    },
+    "unknown_supplier": "If the origin or original producer is unknown, do not mark a specific origin as confirmed. Label any candidate naming PROVISIONAL_ORIGIN_UNVERIFIED and verify before executable new production DDL.",
+    "recommended_provenance_columns_when_available": [
+      "SOURCE_APP",
+      "UPLOAD_ID",
+      "SOURCE_FILE",
+      "UPLOADED_AT",
+      "INGESTION_RUN_ID"
+    ],
+    "model_aum_evidence": {
+      "workbook_family": "Model AUM Quarterly Summary (quarterly .xlsx files)",
+      "wcm_transmitted_or_distributed": "EVIDENCED: WCM staff sent/forwarded the workbook in April 2026.",
+      "wcm_is_original_producer": "UNVERIFIED",
+      "original_calculation_owner": "UNVERIFIED",
+      "ingestion_application": "WCMUPLOADER, evidenced by Snowflake upload logs referencing MODEL_ACCOUNTS_STREAMLIT",
+      "candidate_origin": "WCM (provisional, original producer unverified)",
+      "candidate_name": "VW_SRC_WCM_WCMUPLOADER_MODEL_ACCOUNTS",
+      "evidence_summary": "WCM transmitted the quarterly workbook in April 2026. June AUM Jira and November uploader activity identify the file family, not the original compiler."
+    },
+    "factset_etf_evidence": {
+      "origin": "FACTSET",
+      "status": "VERIFIED_FROM_WCM_DOCUMENTED_PIPELINE",
+      "lineage": "PROD.FACTSET.TASK_REFRESH_MARKET_VALUE_ETF -> PROD.DATALAKE.SP_REFRESH_MARKET_VALUE_ETF() -> PROD.DATALAKE.FACTSET_SECURITY_ATTRIBUTES + ETF account reference mapping -> PROD.DATALAKE.MARKET_VALUE_ETF.",
+      "catalog_types": {
+        "PROD.DATALAKE.MARKET_VALUE_ETF": "BASE TABLE",
+        "PROD.DATALAKE.MARKET_VALUE_ETF_REFERENCE": "BASE TABLE",
+        "DEV.AUM.SRC_EXTERNAL_ETF": "VIEW",
+        "DEV.AUM.SRC_EXTERNAL_ETF_REFERENCE": "VIEW"
+      },
+      "proposed_names": {
+        "PROD.DATALAKE.MARKET_VALUE_ETF": "TBL_SRC_FACTSET_ETF_MARKET_VALUES",
+        "PROD.DATALAKE.MARKET_VALUE_ETF_REFERENCE": "TBL_MAP_ETF_ACCOUNTS",
+        "DEV.AUM.SRC_EXTERNAL_ETF": "VW_SRC_FACTSET_ETF_MARKET_VALUES",
+        "DEV.AUM.SRC_EXTERNAL_ETF_REFERENCE": "VW_MAP_ETF_ACCOUNTS"
+      },
+      "caveat": "Documents establish FactSet lineage and reference-mapping responsibility; these are naming proposals, not evidence of new deployed objects or authority to alter the pipeline."
+    }
+  },
+  "mapping_policy": {
+    "rule": "MAPPINGS is the proposed shared business crosswalk schema, MAPPINGS_APP is the separate application operations schema. Crosswalk datasets use MAP and plural subjects where applicable. Existing objects are not moved merely by adopting a naming standard.",
+    "shared_cross_domain": "<DATABASE>.MAPPINGS.<TYPE>_MAP_<PLURAL_SUBJECT>, e.g. PROD.MAPPINGS.TBL_MAP_MODEL_ACCOUNTS",
+    "single_domain": "<DATABASE>.<DOMAIN_SCHEMA>.<TYPE>_MAP_<SUBJECT>, e.g. PROD.AUM.TBL_MAP_WRAP_OVERRIDES",
+    "application_schema": "<DATABASE>.MAPPINGS_APP. Examples: PROD.MAPPINGS_APP.TBL_CFG_SETTINGS, DEV.MAPPINGS_APP.SP_RUN_MAPPING_BATCH.",
+    "existing_names": "PROD.MAPPINGS contains archived legacy objects in the supplied live catalog. DEV.MAPPING_APP exists and remains unchanged until an intentional migration. The audit does not verify an active PROD.MAPPINGS_APP schema.",
+    "shared_mapping_required_metadata": [
+      "owner",
+      "business keys",
+      "conflict handling",
+      "downstream use",
+      "permissions/grants"
+    ]
+  },
+  "environment_policy": {
+    "rule": "The same schema and object name is used in DEV and PROD. The environment appears only in the database name.",
+    "account_level_objects": "Roles, warehouses and integrations have no database. Add the environment as the last token only when the object is environment-specific (WH_AUM_PROCESSING_DEV). Existing roles and warehouses keep their names."
+  },
+  "lifecycle_names": {
+    "allowed": {
+      "_V<n>": "Side-by-side development or evaluation candidate. May exist temporarily in DEV or PROD while evaluated; once promoted as canonical, the PROD name must be unversioned.",
+      "Z_ARCHIVE_<ORIGINAL_NAME>_<YYYY_MM_DD>": "Preferred format for new dated archive objects; matches the predominant WCM practice, e.g. Z_ARCHIVE_WEBSITE_RETURNS_DAY_VW_2026_11_10."
+    },
+    "forbidden": "Avoid permanent NEW/FINAL/FIX/OLD/TEST/TMP/COPY/BAK suffixes on canonical objects. Preserve legacy naming where no controlled migration is planned.",
+    "production_rule": "At approved cutover, the canonical production object must use its unversioned name. A production _V2 candidate is not automatically a violation simply because it exists."
+  },
+  "type_change_rule": {
+    "rule": "For an explicitly approved physical type change, deploy the correctly prefixed replacement, update all references to the new name, then drop the obsolete object after cutover. Never leave an incorrectly prefixed object as the final implementation.",
+    "compatibility": "A temporary, read-only pass-through view retaining the old interface may be used only when an existing external consumer requires it; name its retirement point. It is an exception, not the final desired design.",
+    "scope": "This rule is for an authorized type migration, not permission for the naming checker to alter DEV or PROD."
+  },
+  "documentation": {
+    "rule": "Document grain, owner, source and refresh for significant new data objects. COMMENT_MISSING is not a default checker finding for deployed legacy objects.",
+    "comment_template": "GRAIN: <one row per ...> | OWNER: <team> | SOURCE: <upstream objects> | REFRESH: <schedule or event>"
+  },
+  "disambiguation": {
+    "calc_vs_fact": "Ask: is this the governed business measurement consumers should use? Yes = FACT. No = CALC. Storage type and SQL complexity do not decide it.",
+    "fact_vs_hist": "FACT can hold years of measurements. HIST is for preserved earlier states, versions, or provenance.",
+    "map_vs_lookup": "MAP links two identifiers. LOOKUP decodes one code into a label.",
+    "lookup_vs_dim": "LOOKUP is a short controlled list. DIM is a business entity with analytical attributes.",
+    "cfg_vs_lookup": "CFG changes how a process runs. LOOKUP describes data.",
+    "lookup_vs_ref": "Use LOOKUP for new controlled-value objects. REF is legacy-only.",
+    "temporary_table": "TMP_ is for session temporary tables only. A permanent object never carries TMP_ or TEMP_.",
+    "sp_prefix": "SP_ means stored procedure. Two legacy views use SP_ for SharePoint (SP_SEI_ACCT_MAPPING, SP_MODEL_ACCT_MAPPING); do not copy that usage.",
+    "materialized_view": "MVW_ names the type only. A Snowflake materialized view can query a single table, so multi-table results need a dynamic table. A name never implies eligibility.",
+    "namespace": "Tables, views and dynamic tables share a namespace in their schema; check availability before proposing a new object name.",
+    "unlisted_object_type": "There is no approved prefix. Say so, propose the Snowflake object type word as a provisional prefix, and flag it for team agreement.",
+    "source_origin_vs_channel": "Source WCM and channel WCMUPLOADER are distinct attributes. Provisional VW_SRC_WCM_WCMUPLOADER_MODEL_ACCOUNTS stays provisional until source producer is verified.",
+    "approval_status": "This is a proposed standard. The JSON guides candidate names; it does not grant approval to rename, remove or modify existing objects.",
+    "pluralization": "Datasets and collections take a plural subject (ACCOUNTS, MAPPINGS, VALUATIONS, MARKET_VALUES, STATUSES). Business measures and aggregate metrics remain singular (AUM, MARKET_VALUE when naming a single metric). Process actions remain singular. Use the explicit approved subject dictionary below for established exceptions."
+  },
+  "decision_procedure": [
+    "Check scope and deployed object type.",
+    "Select one data purpose or approved process action.",
+    "For SRC, verify origin and optionally add channel.",
+    "Choose a descriptive subject and check schema exceptions.",
+    "Propose the full name; never treat proposals as deployed objects."
+  ],
+  "valid_examples": [
+    {
+      "name": "DEV.AUM.VW_SRC_SEI_WCMUPLOADER_WRAP_ACCOUNTS",
+      "type": "view",
+      "purpose_or_action": "SRC",
+      "note": "SEI-supplied WRAP account records normalized after upload through the WCM application; proposed name."
+    },
+    {
+      "name": "PROD.AUM.VW_SRC_INDATA_APEX_DAILY_VALUE",
+      "type": "view",
+      "purpose_or_action": "SRC",
+      "note": "Proposed view over InData-derived APEX daily values; PROD.DATALAKE.APEX_DT is verified to be a view."
+    },
+    {
+      "name": "PROD.AUM.TBL_MAP_ETF_ACCOUNTS",
+      "type": "table",
+      "purpose_or_action": "MAP",
+      "note": "Example crosswalk linking ETF identifiers to accounts."
+    },
+    {
+      "name": "DEV.AUM.TMP_FACT_REFRESH",
+      "type": "temporary table",
+      "note": "Session-scoped work table for refreshing a fact."
+    },
+    {
+      "name": "DEV.AUM.VW_CALC_MODEL_AUM",
+      "type": "view",
+      "purpose_or_action": "CALC",
+      "note": "Intermediate Model AUM logic; AUM is a business measure and remains singular."
+    },
+    {
+      "name": "DEV.AUM.DYN_CALC_MODEL_AUM",
+      "type": "dynamic table",
+      "purpose_or_action": "CALC",
+      "note": "Dynamic-table version of an intermediate Model AUM result."
+    },
+    {
+      "name": "DEV.AUM.TBL_HIST_MODEL_AUM",
+      "type": "table",
+      "purpose_or_action": "HIST",
+      "note": "Preserved history and calculation provenance for Model AUM."
+    },
+    {
+      "name": "DEV.AUM.TBL_FACT_MONTH_END_AUM",
+      "type": "table",
+      "purpose_or_action": "FACT",
+      "note": "Month-end AUM measurements at a defined reporting grain."
+    },
+    {
+      "name": "DEV.AUM.TBL_DIM_ACCOUNTS",
+      "type": "table",
+      "purpose_or_action": "DIM",
+      "note": "Descriptive entity rows for accounts."
+    },
+    {
+      "name": "DEV.AUM.TBL_LOOKUP_ACCOUNT_STATUSES",
+      "type": "table",
+      "purpose_or_action": "LOOKUP",
+      "note": "Controlled account-status codes and labels."
+    },
+    {
+      "name": "PROD.MAPPINGS.TBL_MAP_MODEL_ACCOUNTS",
+      "type": "table",
+      "purpose_or_action": "MAP",
+      "note": "Shared mapping records for Model accounts; proposed name, not a deployed table claim."
+    },
+    {
+      "name": "PROD.MAPPINGS.TBL_MAP_STRATEGIES",
+      "type": "table",
+      "purpose_or_action": "MAP",
+      "note": "Shared strategy identifier crosswalk, collection name is plural."
+    },
+    {
+      "name": "PROD.AUM.TBL_MAP_WRAP_OVERRIDES",
+      "type": "table",
+      "purpose_or_action": "MAP",
+      "note": "AUM-only override mappings."
+    },
+    {
+      "name": "PROD.MAPPINGS_APP.TBL_CFG_SETTINGS",
+      "type": "table",
+      "purpose_or_action": "CFG",
+      "note": "Mapping application settings, separate from shared business crosswalks."
+    },
+    {
+      "name": "DEV.MAPPINGS_APP.TBL_AUDIT_MAPPING_RUNS",
+      "type": "table",
+      "purpose_or_action": "AUDIT",
+      "note": "Mapping application run history and diagnostics."
+    },
+    {
+      "name": "DEV.AUM.TBL_CFG_AUM_REFRESH",
+      "type": "table",
+      "purpose_or_action": "CFG",
+      "note": "AUM refresh configuration; AUM remains singular."
+    },
+    {
+      "name": "DEV.AUM.TBL_AUDIT_AUM_REFRESH_RUNS",
+      "type": "table",
+      "purpose_or_action": "AUDIT",
+      "note": "History of AUM refresh runs."
+    },
+    {
+      "name": "DEV.AUM.SP_REFRESH_MODEL_AUM",
+      "type": "stored procedure",
+      "purpose_or_action": "REFRESH",
+      "note": "Refreshes Model AUM; already exists in DEV.AUM."
+    },
+    {
+      "name": "DEV.AUM.TASK_REFRESH_AUM",
+      "type": "task",
+      "purpose_or_action": "REFRESH",
+      "note": "Scheduled task to refresh AUM; already exists in DEV.AUM."
+    },
+    {
+      "name": "DEV.AUM.SP_RUN_AUM_WORKFLOW",
+      "type": "stored procedure",
+      "purpose_or_action": "RUN",
+      "note": "Orchestrates a multi-step AUM workflow."
+    },
+    {
+      "name": "DEV.MAPPINGS_APP.SP_RUN_MAPPING_BATCH",
+      "type": "stored procedure",
+      "purpose_or_action": "RUN",
+      "note": "Runs mapping application batch processing; operational rather than business crosswalk data."
+    },
+    {
+      "name": "DEV.AUM.PIPE_LOAD_MODEL_FILES",
+      "type": "pipe",
+      "purpose_or_action": "LOAD",
+      "note": "Loads Model files into an ingest path."
+    },
+    {
+      "name": "DEV.AUM.FN_LAST_WEEKDAY_OF_MONTH",
+      "type": "function / UDF",
+      "note": "Returns the last weekday of a month; functional name stays singular."
+    },
+    {
+      "name": "DEV.AUM.STREAM_SRC_SEI_WCMUPLOADER_WRAP_ACCOUNTS",
+      "type": "stream",
+      "note": "Stream follows a single source dataset."
+    },
+    {
+      "name": "DEV.AUM.STAGE_MODEL_UPLOADS",
+      "type": "stage",
+      "note": "Stage containing Model upload files."
+    },
+    {
+      "name": "DEV.AUM.FF_MODEL_CSV",
+      "type": "file format",
+      "note": "CSV file format definition for Model files."
+    },
+    {
+      "name": "DEV.AUM.ALERT_AUM_REFRESH_FAILURE",
+      "type": "alert",
+      "note": "Alert for failed AUM refresh."
+    },
+    {
+      "name": "PROD.BI.MONTH_END_AUM",
+      "type": "view",
+      "note": "Existing unprefixed client-facing BI view."
+    },
+    {
+      "name": "DEV.AUM.TBL_FACT_MONTH_END_AUM_V2",
+      "type": "table",
+      "purpose_or_action": "FACT",
+      "note": "Temporary side-by-side candidate during evaluation, not canonical production name."
+    },
+    {
+      "name": "DEV.AUM.Z_ARCHIVE_TBL_FACT_MONTH_END_AUM_2026_11_18",
+      "type": "table",
+      "purpose_or_action": "FACT",
+      "note": "Archive naming matches the prevalent WCM YYYY_MM_DD style."
+    },
+    {
+      "name": "PROD.AUM.TBL_SRC_FACTSET_ETF_MARKET_VALUES",
+      "type": "table",
+      "purpose_or_action": "SRC",
+      "note": "Proposed FactSet-derived ETF daily market-values dataset; FactSet origin documented in ETF refresh chain."
+    },
+    {
+      "name": "DEV.AUM.VW_SRC_FACTSET_ETF_MARKET_VALUES",
+      "type": "view",
+      "purpose_or_action": "SRC",
+      "note": "Proposed DEV view over the FactSet-derived ETF market-values dataset."
+    },
+    {
+      "name": "DEV.AUM.VW_MAP_ETF_ACCOUNTS",
+      "type": "view",
+      "purpose_or_action": "MAP",
+      "note": "Proposed mapping view over the ETF reference crosswalk."
+    },
+    {
+      "name": "DEV.AUM.TASK_REFRESH_MODEL_AUM",
+      "type": "task",
+      "purpose_or_action": "REFRESH",
+      "note": "Illustrative new task paired by suffix with SP_REFRESH_MODEL_AUM; not asserted deployed."
+    }
+  ],
+  "corrections": [
+    {
+      "wrong": "FACT_MONTH_END_AUM",
+      "right": "TBL_FACT_MONTH_END_AUM",
+      "why": "Tables use a physical TBL_ prefix."
+    },
+    {
+      "wrong": "VW_MODEL_AUM",
+      "right": "VW_CALC_MODEL_AUM",
+      "why": "Data objects need one meaningful business purpose."
+    },
+    {
+      "wrong": "TBL_FACT_CALC_MODEL_AUM",
+      "right": "TBL_FACT_MONTH_END_AUM or TBL_CALC_MODEL_AUM",
+      "why": "Choose one purpose based on responsibility."
+    },
+    {
+      "wrong": "PROD.MAPPINGS.TBL_MODEL_ACCOUNTS",
+      "right": "PROD.MAPPINGS.TBL_MAP_MODEL_ACCOUNTS",
+      "why": "MAP identifies a crosswalk; MAPPINGS identifies the shared namespace."
+    },
+    {
+      "wrong": "DEV.MAPPING_APP.TBL_CFG_SETTINGS proposed as a new schema",
+      "right": "DEV.MAPPINGS_APP.TBL_CFG_SETTINGS",
+      "why": "MAPPINGS_APP is the new canonical app schema; current DEV.MAPPING_APP is a grandfathered deployed schema."
+    },
+    {
+      "wrong": "TBL_MAP_SEI_ACCT_MAPPING",
+      "right": "TBL_MAP_SEI_ACCOUNTS",
+      "why": "Use full ACCOUNT and avoid repeating MAP or MAPPING."
+    },
+    {
+      "wrong": "VW_SRC_SFTP_WRAP_ACCOUNTS",
+      "right": "VW_SRC_SEI_SFTP_WRAP_ACCOUNTS",
+      "why": "Identify the supplier before the transfer channel."
+    },
+    {
+      "wrong": "VW_SRC_STREAMLIT_WRAP_ACCOUNTS",
+      "right": "VW_SRC_SEI_WCMUPLOADER_WRAP_ACCOUNTS",
+      "why": "WCMUPLOADER identifies the application, not its current UI framework."
+    },
+    {
+      "wrong": "PROD.BI.VW_FACT_MONTH_END_AUM",
+      "right": "PROD.BI.MONTH_END_AUM",
+      "why": "Consumer-facing BI views use plain business names."
+    },
+    {
+      "wrong": "TBL_FACT_MONTH_END_AUM_NEW",
+      "right": "DEV.AUM.TBL_FACT_MONTH_END_AUM_V2 for evaluation; PROD.AUM.TBL_FACT_MONTH_END_AUM after approved cutover",
+      "why": "Use an evaluation version temporarily and remove it from the canonical production name."
+    },
+    {
+      "wrong": "SP_MODEL_AUM",
+      "right": "SP_REFRESH_MODEL_AUM",
+      "why": "Process objects need an action."
+    },
+    {
+      "wrong": "VW_CALC_MODEL_AUM when deployed as dynamic table",
+      "right": "DYN_CALC_MODEL_AUM",
+      "why": "The physical prefix must match the actual object type."
+    }
+  ],
+  "legacy_objects": {
+    "status": "Selected legacy PROD examples; names are observed, proposed names are not deployed replacements.",
+    "objects": [
+      {
+        "existing": "PROD.DATALAKE.WM_STAGE_SEI",
+        "proposed": "VW_SRC_SEI_WCMUPLOADER_WRAP_ACCOUNTS",
+        "responsibility": "SEI WRAP account file, via the uploader",
+        "decision": "PROPOSED_RENAME_ONLY",
+        "note": "Illustrative candidate, not deployed."
+      },
+      {
+        "existing": "PROD.DATALAKE.WM_STAGE_MODEL_PK",
+        "proposed": null,
+        "responsibility": "Quarterly model AUM summary, via the uploader",
+        "note": "WCM distributed workbook; original compiler unverified. Provisional example separately listed.",
+        "decision": "VERIFY_ORIGIN_FIRST"
+      },
+      {
+        "existing": "PROD.DATALAKE.APEX_DT",
+        "proposed": "VW_SRC_INDATA_APEX_DAILY_VALUE",
+        "responsibility": "Indata APEX value per account per day",
+        "note": "Snowflake metadata supplied by user: TABLE_TYPE=VIEW; IS_DYNAMIC=NO. No rename performed.",
+        "decision": "VIEW_TYPE_VERIFIED_PROPOSED_NAME"
+      },
+      {
+        "existing": "PROD.CORE.APEX",
+        "proposed": null,
+        "responsibility": "Same data as APEX_DT, older build",
+        "note": "Still read by PROD views, Sigma and tasks; No new name recommended until all downstream consumers are mapped.",
+        "decision": "RETAIN_AND_REVIEW_FOR_DECOMMISSION"
+      },
+      {
+        "existing": "PROD.DATALAKE.MARKET_VALUE_ETF",
+        "proposed": "TBL_SRC_FACTSET_ETF_MARKET_VALUES",
+        "responsibility": "ETF market value per security per day",
+        "note": "Native FactSet attributes feed the ETF refresh. Existing production table is unchanged.",
+        "decision": "DOCUMENTED_FACTSET_LINEAGE_PROPOSED_NAME"
+      },
+      {
+        "existing": "PROD.DATALAKE.MARKET_VALUE_ETF_REFERENCE",
+        "proposed": "TBL_MAP_ETF_ACCOUNTS",
+        "responsibility": "Links ETF security to account and WCM number",
+        "decision": "REFERENCE_MAPPING_PROPOSED_NAME",
+        "note": "ETF identifier/account crosswalk, not market-value observations. Existing table is unchanged."
+      },
+      {
+        "existing": "PROD.CORE.SP_SEI_ACCT_MAPPING",
+        "proposed": "VW_MAP_SEI_ACCOUNTS",
+        "responsibility": "SEI mapping sheet",
+        "note": "SP_ here means SharePoint, not procedure",
+        "decision": "PROPOSED_RENAME_ONLY"
+      },
+      {
+        "existing": "PROD.CORE.SP_MODEL_ACCT_MAPPING",
+        "proposed": "VW_MAP_MODEL_ACCOUNTS",
+        "responsibility": "Model strategy mapping sheet",
+        "note": "SP_ here means SharePoint, not procedure",
+        "decision": "PROPOSED_RENAME_ONLY"
+      },
+      {
+        "existing": "PROD.DATALAKE.WM_SEI_AUM",
+        "proposed": "VW_CALC_WRAP_AUM",
+        "responsibility": "WRAP actuals and estimates",
+        "decision": "PROPOSED_RENAME_ONLY",
+        "note": "Illustrative candidate, not deployed."
+      },
+      {
+        "existing": "PROD.DATALAKE.VW_WM_AUM_FULL",
+        "proposed": "VW_CALC_MODEL_AUM",
+        "responsibility": "Model actuals and estimates",
+        "decision": "PROPOSED_RENAME_ONLY",
+        "note": "Illustrative candidate, not deployed."
+      },
+      {
+        "existing": "PROD.DATALAKE.WM_STAGE_ALL_SEI_MODEL",
+        "proposed": "VW_CALC_COMBINED_AUM",
+        "responsibility": "Model, WRAP and history combined",
+        "decision": "PROPOSED_RENAME_ONLY",
+        "note": "Illustrative candidate, not deployed."
+      },
+      {
+        "existing": "PROD.DATALAKE.VW_MONTH_END_AUM",
+        "proposed": "VW_CALC_MONTH_END_AUM",
+        "responsibility": "Month-end assembly",
+        "decision": "PROPOSED_RENAME_ONLY",
+        "note": "Illustrative candidate, not deployed."
+      },
+      {
+        "existing": "PROD.DATALAKE.MONTH_END_AUM",
+        "proposed": "DYN_FACT_MONTH_END_AUM",
+        "responsibility": "Published month-end AUM (dynamic table)",
+        "note": "PROD.BI.MONTH_END_AUM reads it",
+        "decision": "PROPOSED_RENAME_ONLY"
+      },
+      {
+        "existing": "PROD.BI.MONTH_END_AUM",
+        "proposed": null,
+        "responsibility": "Client-facing view of month-end AUM",
+        "note": "Already conforms.",
+        "decision": "KEEP_CURRENT_NAME"
+      }
+    ],
+    "coverage": "Not a full production inventory. Existing names remain unchanged unless a separately authorized migration occurs."
+  },
+  "ai_output_contract": {
+    "new_name_response": "Fully qualified name | object type | business purpose or action | rationale | verification status",
+    "existing_sql": "Keep deployed names unchanged unless migration was explicitly requested.",
+    "unknowns": "Clearly label uncertain source owner, object type or provenance as UNVERIFIED; never guess a production prefix.",
+    "prohibitions": [
+      "Do not claim that a proposed name exists in Snowflake.",
+      "Do not alter deployed objects without explicitly authorized deployment.",
+      "Do not assert the original Model workbook compiler or producer from a forwarding email.",
+      "Do not treat a PROD _V2 evaluation candidate as an automatic violation; after cutover the canonical production name is unversioned.",
+      "Do not use consumer-facing BI objects as inputs to newly authored internal SQL."
+    ]
+  },
+  "conformance_check": {
+    "file": "WCM_Snowflake_Naming_Conformance_Check_v1.3.9.sql",
+    "default_scope": {
+      "databases": [
+        "DEV",
+        "PROD"
+      ],
+      "schemas": [
+        "AUM",
+        "BI"
+      ]
+    },
+    "behavior": "Read-only one-statement catalog report, defaulting to DEV/PROD AUM and BI. Archive reports are opt-in. No hardcoded RIDGELINE/SF2SF filter in a scoped run.",
+    "findings": {
+      "NOT_UPPER_SNAKE_CASE": "Identifier violates uppercase snake case (no duplicate/trailing separators).",
+      "TYPE_PREFIX_MISMATCH": "Actual catalog type is inconsistent with physical prefix.",
+      "PURPOSE_MISSING": "Internal data object lacks its approved second-token purpose.",
+      "SUBJECT_MISSING": "Descriptive subject is absent.",
+      "SRC_ORIGIN_OR_SUBJECT_MISSING": "SRC requires both origin and descriptive subject.",
+      "SRC_CHANNEL_IN_ORIGIN_SLOT": "Channel token used where source origin should appear.",
+      "PROCESS_SUBJECT_MISSING": "Procedure lacks a complete action and subject.",
+      "ACTION_VERB_UNLISTED": "The process action is not in the approved dictionary.",
+      "BI_PREFIX_FORBIDDEN": "BI consumer-facing view has a physical/purpose prefix.",
+      "MAPPINGS_PURPOSE_MISMATCH": "New shared crosswalk object in MAPPINGS does not use MAP purpose.",
+      "ARCHIVE_FORMAT_INVALID": "Archive name differs from Z_ARCHIVE_<NAME>_<YYYY_MM_DD>. Archives are opt-in.",
+      "FORBIDDEN_SUFFIX": "Canonical name uses a prohibited lifecycle suffix."
+    },
+    "not_reported": {
+      "COMMENT_MISSING": "Documentation recommendation, not default naming syntax check.",
+      "CLIENT_OBJECT_NOT_A_VIEW": "BI has legitimate legacy tables, dynamic tables and procedures.",
+      "PROD_VERSION_SUFFIX": "Cannot infer whether a _V2 object has completed production cutover; rule enforced at cutover, not through catalog name alone.",
+      "NAME_TOO_LONG": "Snowflake itself prevents identifiers longer than 255 characters."
+    },
+    "out_of_scope": "Tasks, streams, stages, external object ownership, active DDL timeline, source provenance and adoption date are not inferred from the ACCOUNT_USAGE catalog.",
+    "test_status": "v1.3.7 checker ran live. v1.3.9 is modified offline and must be checked live to confirm its account-level behavior."
+  },
+  "rule_levels": {
+    "mandatory_sections": [
+      "grammar",
+      "physical_types",
+      "data_purposes",
+      "action_verbs",
+      "client_layer",
+      "source_origin_policy",
+      "mapping_policy",
+      "lifecycle_names",
+      "type_change_rule",
+      "pluralization_policy"
+    ],
+    "discretionary_sections": [
+      "documentation"
+    ],
+    "exceptions": "Describe an unresolved case without inventing a new approved name. A published contract update is required before treating a newly proposed action or prefix as standard."
+  },
+  "conditional_examples": [
+    {
+      "name": "DEV.AUM.VW_SRC_WCM_WCMUPLOADER_MODEL_ACCOUNTS",
+      "type": "view",
+      "purpose_or_action": "SRC",
+      "note": "WCM was observed transmitting the quarterly Model workbook, but original producer is unverified; name remains provisional.",
+      "verification": "ORIGIN_UNVERIFIED"
+    }
+  ],
+  "verification_pending": {
+    "MODEL_ORIGIN": "Confirm which organization/system originally produces and calculates Model AUM Quarterly Summary; WCM sending the workbook is insufficient proof.",
+    "MAPPINGS_APP_DEPLOYMENT": "The target application schema name is MAPPINGS_APP. The observed DEV.MAPPING_APP remains as deployed until intentionally migrated."
+  },
+  "pluralization_policy": {
+    "rule": "Datasets and collections take a plural subject (ACCOUNTS, MAPPINGS, VALUATIONS, MARKET_VALUES, STATUSES). Business measures and aggregate metrics remain singular (AUM, MARKET_VALUE when naming a single metric). Process actions remain singular. Use the explicit approved subject dictionary below for established exceptions.",
+    "default_for_datasets": "PLURAL",
+    "default_for_measures": "SINGULAR",
+    "priority": "Business meaning and approved subject dictionary take precedence; no mass renaming of existing objects.",
+    "approved_subjects": {
+      "APEX_DAILY_VALUE": "Approved established business/source term for PROD.DATALAKE.APEX_DT, even though the view returns many rows. Do not alternate with APEX_DAILY_VALUES.",
+      "APEX_VALUATIONS": "Multi-column valuation source view for the legacy CORE APEX valuation logic; different object from APEX_DT.",
+      "ETF_MARKET_VALUES": "Dataset with multiple ETF market-value observations; use plural VALUES.",
+      "ETF_ACCOUNTS": "Crosswalk of ETF identifiers to WCM accounts; use plural ACCOUNTS.",
+      "MODEL_ACCOUNTS": "Uploaded Model account dataset; use plural ACCOUNTS.",
+      "WRAP_ACCOUNTS": "Uploaded WRAP account dataset; use plural ACCOUNTS.",
+      "MODEL_AUM": "Business AUM measure remains singular.",
+      "MONTH_END_AUM": "Governed AUM measurement remains singular."
+    },
+    "examples": {
+      "schemas": [
+        "PROD.MAPPINGS",
+        "PROD.MAPPINGS_APP"
+      ],
+      "datasets": [
+        "TBL_MAP_MODEL_ACCOUNTS",
+        "TBL_LOOKUP_ACCOUNT_STATUSES",
+        "VW_SRC_INDATA_APEX_VALUATIONS",
+        "TBL_SRC_FACTSET_ETF_MARKET_VALUES"
+      ],
+      "measures": [
+        "VW_CALC_MODEL_AUM",
+        "TBL_FACT_MONTH_END_AUM",
+        "PROD.BI.MONTH_END_AUM"
+      ],
+      "approved_exception": [
+        "VW_SRC_INDATA_APEX_DAILY_VALUE"
+      ]
+    }
+  },
+  "verified_live_findings": {
+    "source": "User-provided Snowflake metadata and full naming-audit result supplied 2026-11-18; no fresh Snowflake execution performed by this package.",
+    "catalog_objects_checked": 1573,
+    "catalog_conforming_under_old_checker": 39,
+    "catalog_flagged_under_old_checker": 1534,
+    "interpretation": "These counts are dominated by the old checker applying a proposed convention to legacy objects. They are not production defect counts.",
+    "apex_dt": {
+      "object": "PROD.DATALAKE.APEX_DT",
+      "table_type": "VIEW",
+      "is_dynamic": "NO",
+      "prefix": "VW"
+    },
+    "archive_practice": "249 of 290 archived objects in supplied report used _YYYY_MM_DD; existing variants remain unchanged.",
+    "bi_contains_other_types": "PROD.BI contains tables, dynamic tables and a procedure, not only views.",
+    "mapping_schemas_observed": [
+      "PROD.MAPPINGS",
+      "DEV.MAPPING_APP"
+    ],
+    "dev_aum_inventory_count": 14,
+    "scope_note": "Checker defaults to AUM and BI; other schemas including RIDGELINE and SF2SF are outside the default scope. The scoped checker does not require redundant exclusions.",
+    "factset_etf_lineage": "Documented WCM ETF migration specifies native FACTSET_SECURITY_ATTRIBUTES input, refresh procedure and mapping reference; accepted as established project lineage.",
+    "date_of_audit": "2026-11-18"
+  },
+  "dev_aum_live_inventory": {
+    "source": "14 DEV.AUM data objects and physical types reported in the supplied live checker output; captured 2026-11-18.",
+    "objects": [
+      {
+        "existing": "DEV.AUM.CALC_COMBINED_AUM",
+        "physical_type": "VIEW",
+        "proposed_name": "VW_CALC_COMBINED_AUM",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.CALC_MODEL_AUM",
+        "physical_type": "VIEW",
+        "proposed_name": "VW_CALC_MODEL_AUM",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.CALC_MONTH_END_AUM",
+        "physical_type": "VIEW",
+        "proposed_name": "VW_CALC_MONTH_END_AUM",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.CALC_WRAP_AUM",
+        "physical_type": "VIEW",
+        "proposed_name": "VW_CALC_WRAP_AUM",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.FACT_MONTH_END_AUM",
+        "physical_type": "BASE TABLE",
+        "proposed_name": "TBL_FACT_MONTH_END_AUM",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.FACT_MONTH_END_AUM_PARITY_R26",
+        "physical_type": "BASE TABLE",
+        "proposed_name": null,
+        "classification": "VALIDATION_ARTIFACT",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.HIST_MODEL_AUM",
+        "physical_type": "BASE TABLE",
+        "proposed_name": "TBL_HIST_MODEL_AUM",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.SRC_EXTERNAL_APEX_CANDIDATE",
+        "physical_type": "VIEW",
+        "proposed_name": null,
+        "classification": "EVALUATION_ONLY",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.SRC_EXTERNAL_APEX_REPORTING",
+        "physical_type": "VIEW",
+        "proposed_name": "VW_SRC_INDATA_APEX_DAILY_VALUE",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.SRC_EXTERNAL_APEX_VALUATIONS",
+        "physical_type": "VIEW",
+        "proposed_name": "VW_SRC_INDATA_APEX_VALUATIONS",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.SRC_EXTERNAL_ETF",
+        "physical_type": "VIEW",
+        "proposed_name": "VW_SRC_FACTSET_ETF_MARKET_VALUES",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.SRC_EXTERNAL_ETF_REFERENCE",
+        "physical_type": "VIEW",
+        "proposed_name": "VW_MAP_ETF_ACCOUNTS",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.SRC_UPLOAD_MODEL",
+        "physical_type": "VIEW",
+        "proposed_name": null,
+        "classification": "ORIGIN_TO_VERIFY",
+        "deployed_rename": false
+      },
+      {
+        "existing": "DEV.AUM.SRC_UPLOAD_WRAP",
+        "physical_type": "VIEW",
+        "proposed_name": "VW_SRC_SEI_WCMUPLOADER_WRAP_ACCOUNTS",
+        "classification": "PERMANENT_PIPELINE",
+        "deployed_rename": false
+      }
+    ],
+    "note": "11 views and 3 base tables. FACT_MONTH_END_AUM_PARITY_R26 is a validation artifact; SRC_EXTERNAL_APEX_CANDIDATE is evaluation-only and had zero known downstream consumers in the November 4 acceptance audit.",
+    "excludes": "DEV.AUM.SP_REFRESH_MODEL_AUM and DEV.AUM.TASK_REFRESH_AUM conform already and are separate process objects."
+  }
+}
