@@ -1,18 +1,16 @@
 {
   "standard_id": "WCM-SNOWFLAKE-NAMING",
   "intent": "The single canonical WCM Snowflake naming contract for future object naming, SQL and AI assistance; no automatic DDL or changes to existing objects.",
-  "version": "1.3.9",
-  "date": "2026-11-18",
+  "version": "1.3.11",
+  "date": "2026-11-19",
   "status": "PROPOSED_FOR_TEAM_REVIEW; effective date not yet set",
-  "supersedes": "1.3.8",
+  "supersedes": "1.3.10",
   "source_of_truth": {
-    "canonical_file": "WCM_Snowflake_Naming_Contract_v1.3.9.json",
+    "canonical_file": "WCM_Snowflake_Naming_Contract_v1.3.11.json",
     "derived_files": [
-      "WCM_Snowflake_Naming_AI_Instructions_v1.3.9.md",
-      "WCM_Snowflake_Naming_Conformance_Check_v1.3.9.sql",
-      "WCM_Snowflake_Naming_Standard_v1.3.9_20261118.pdf"
+      "WCM_Snowflake_Naming_AI_Instructions_v1.3.11.md"
     ],
-    "precedence": "Canonical JSON is authoritative. PDF and Markdown explain the same contract. Existing SQL must still use actual deployed names."
+    "precedence": "The companion v1.3.11 JSON is authoritative; the v1.3.11 Markdown explains the same rules. The v1.3.9 SQL checker and PDF remain unchanged historical supporting artifacts, not v1.3.11 deliverables. Executable SQL must reference actual deployed names."
   },
   "scope": {
     "applies_immediately_to": [
@@ -37,7 +35,7 @@
   "grammar": {
     "fully_qualified": "<DATABASE>.<SCHEMA>.<OBJECT>",
     "database": "environment: DEV or PROD",
-    "schema": "Use business-domain schemas, MAPPINGS for shared crosswalks, MAPPINGS_APP for app operations, and BI for consumer-facing outputs.",
+    "schema": "Use owning business-domain schemas for data/processes, MAPPINGS for proposed shared crosswalk datasets, STREAMLIT for new WCM-owned Streamlit app definitions and strictly app-specific support objects (PROD.STREAMLIT; DEV.STREAMLIT when appropriate), and BI for consumer-facing interfaces. DATALAKE remains an existing data and pipeline schema, not the target schema for new Streamlit app definitions.",
     "data": "<TYPE>_<PURPOSE>_<SUBJECT>",
     "source_data": "<TYPE>_SRC_<ORIGIN>[_<CHANNEL>]_<SUBJECT>",
     "process": "<TYPE>_<ACTION>_<SUBJECT>",
@@ -45,7 +43,7 @@
     "account_level": "<TYPE>_<SUBJECT>[_<ENV>]",
     "client_view": "<DATABASE>.BI.<BUSINESS_NAME>",
     "case": "UPPER_SNAKE_CASE; unquoted identifiers; A-Z, 0-9 and single separators only (no leading, trailing or repeated underscores)",
-    "schema_exceptions": "BI consumer-facing interfaces use plain names; MAPPINGS holds shared MAP-purpose datasets; MAPPINGS_APP holds app internals.",
+    "schema_exceptions": "BI consumer-facing views use plain business names. MAPPINGS holds shared MAP-purpose crosswalk datasets. New Streamlit app definitions use descriptive UPPER_SNAKE_CASE names in <DATABASE>.STREAMLIT, without an added STREAMLIT_ prefix or mandatory data/process physical prefix; app-specific supporting tables/procedures still follow normal type and purpose/action prefixes. Existing deployed names in DATALAKE and other schemas remain unchanged without planned migration.",
     "identifier_length": "Snowflake allows 255 characters per identifier; no smaller WCM length cap. The three-part qualified name has no extra combined 255-character cap."
   },
   "client_layer": {
@@ -227,11 +225,11 @@
     }
   },
   "mapping_policy": {
-    "rule": "MAPPINGS is the proposed shared business crosswalk schema, MAPPINGS_APP is the separate application operations schema. Crosswalk datasets use MAP and plural subjects where applicable. Existing objects are not moved merely by adopting a naming standard.",
+    "rule": "MAPPINGS is the proposed shared business crosswalk schema; it is not the Streamlit app schema. New WCM-owned Streamlit apps, including the mappings app, belong in PROD.STREAMLIT (DEV.STREAMLIT for development equivalents when used). Only strictly app-specific settings, audits, and procedures belong alongside an app in STREAMLIT; shared mappings stay in MAPPINGS, and existing shared data and pipelines remain in their owning domain or DATALAKE schemas. No separate MAPPINGS_APP schema is proposed; naming guidance does not move deployed objects.",
     "shared_cross_domain": "<DATABASE>.MAPPINGS.<TYPE>_MAP_<PLURAL_SUBJECT>, e.g. PROD.MAPPINGS.TBL_MAP_MODEL_ACCOUNTS",
     "single_domain": "<DATABASE>.<DOMAIN_SCHEMA>.<TYPE>_MAP_<SUBJECT>, e.g. PROD.AUM.TBL_MAP_WRAP_OVERRIDES",
-    "application_schema": "<DATABASE>.MAPPINGS_APP. Examples: PROD.MAPPINGS_APP.TBL_CFG_SETTINGS, DEV.MAPPINGS_APP.SP_RUN_MAPPING_BATCH.",
-    "existing_names": "PROD.MAPPINGS contains archived legacy objects in the supplied live catalog. DEV.MAPPING_APP exists and remains unchanged until an intentional migration. The audit does not verify an active PROD.MAPPINGS_APP schema.",
+    "application_schema": "<DATABASE>.STREAMLIT for new WCM-owned Streamlit apps and strictly app-specific operational objects; for example, PROD.STREAMLIT.TBL_CFG_MAPPING_SETTINGS and DEV.STREAMLIT.SP_RUN_MAPPING_BATCH. Existing deployed app names and locations are preserved until a reviewed, approved migration.",
+    "existing_names": "PROD.MAPPINGS contains archived legacy objects in the supplied live catalog; do not infer active shared mapping tables. DEV.MAPPING_APP is a legacy deployed schema, so keep current object names and references until an explicitly approved migration. PROD.DATALAKE is an established data/process schema; the actual deployment locations of all Streamlit apps have not been independently inventoried by this naming-only update. Do not claim those apps have already moved to PROD.STREAMLIT.",
     "shared_mapping_required_metadata": [
       "owner",
       "business keys",
@@ -239,6 +237,19 @@
       "downstream use",
       "permissions/grants"
     ]
+  },
+  "streamlit_policy": {
+    "target_prod_schema": "PROD.STREAMLIT",
+    "target_dev_schema": "DEV.STREAMLIT",
+    "applies_to": "New WCM-owned Snowflake Streamlit app definitions, including mappings, replication, monitoring, and other internal Streamlit apps.",
+    "app_naming": "<DATABASE>.STREAMLIT.<DESCRIPTIVE_APP_NAME> for new app definitions; use UPPER_SNAKE_CASE, preserve existing app names unless a separate rename is approved, and do not require redundant STREAMLIT_ or TBL_/SP_ prefixes on the Streamlit app object itself.",
+    "app_owned_support": "Only tables, procedures, audit/configuration objects, stages, and files genuinely private to one Streamlit app may use <DATABASE>.STREAMLIT, with normal object-type naming rules. Shared services, orchestration tasks, and cross-app backends stay in their owning schemas.",
+    "data_boundary": "Shared mappings and crosswalks stay in <DATABASE>.MAPPINGS; shared data, transformations, and pipelines remain in DATALAKE, CORE, AUM, or their established business-domain schemas; client-facing interfaces stay in BI.",
+    "existing_objects": "All current production/dev apps and support objects remain at their deployed addresses. This is a proposed target naming standard, not proof that PROD.STREAMLIT or DEV.STREAMLIT exists or has been adopted.",
+    "migration": "Before any app move: inventory each deployed Streamlit object and current source location, app files/stages, dependencies, owner role and privileges, consumer grants, fully qualified and relative references, app URLs/integrations, and scheduled workflows. Create and validate a replacement in the target schema, confirm behavior and access, then cut over and retire the old app only after separate engineering approval. Do not assume changing schema name alone moves an app.",
+    "security": "A Streamlit object has its own schema-level CREATE STREAMLIT/USAGE/OWNERSHIP model and typically owner-rights execution. Test owner-role privileges and app grants during migration; do not grant broad data rights merely to relocate an app.",
+    "illustrative_app": "PROD.STREAMLIT.MAPPINGS_UPLOADER (example name only; not a verified deployed name).",
+    "checker_coverage": "The historical v1.3.9 naming checker defaults to DEV/PROD AUM and BI, so it does not validate Streamlit app placement. No live STREAMLIT schema or app inventory is claimed."
   },
   "environment_policy": {
     "rule": "The same schema and object name is used in DEV and PROD. The environment appears only in the database name.",
@@ -363,16 +374,16 @@
       "note": "AUM-only override mappings."
     },
     {
-      "name": "PROD.MAPPINGS_APP.TBL_CFG_SETTINGS",
+      "name": "PROD.STREAMLIT.TBL_CFG_MAPPING_SETTINGS",
       "type": "table",
       "purpose_or_action": "CFG",
-      "note": "Mapping application settings, separate from shared business crosswalks."
+      "note": "Illustrative mappings Streamlit app configuration, strictly app-owned, in the proposed PROD.STREAMLIT schema; not a deployed-name claim or shared crosswalk."
     },
     {
-      "name": "DEV.MAPPINGS_APP.TBL_AUDIT_MAPPING_RUNS",
+      "name": "DEV.STREAMLIT.TBL_AUDIT_MAPPING_RUNS",
       "type": "table",
       "purpose_or_action": "AUDIT",
-      "note": "Mapping application run history and diagnostics."
+      "note": "Illustrative DEV audit history private to the mappings Streamlit app; not a request to move existing deployed objects."
     },
     {
       "name": "DEV.AUM.TBL_CFG_AUM_REFRESH",
@@ -405,10 +416,10 @@
       "note": "Orchestrates a multi-step AUM workflow."
     },
     {
-      "name": "DEV.MAPPINGS_APP.SP_RUN_MAPPING_BATCH",
+      "name": "DEV.STREAMLIT.SP_RUN_MAPPING_BATCH",
       "type": "stored procedure",
       "purpose_or_action": "RUN",
-      "note": "Runs mapping application batch processing; operational rather than business crosswalk data."
+      "note": "Illustrative app-private batch procedure in the proposed DEV.STREAMLIT namespace; a shared workflow remains in its owning data/domain schema."
     },
     {
       "name": "DEV.AUM.PIPE_LOAD_MODEL_FILES",
@@ -505,9 +516,9 @@
       "why": "MAP identifies a crosswalk; MAPPINGS identifies the shared namespace."
     },
     {
-      "wrong": "DEV.MAPPING_APP.TBL_CFG_SETTINGS proposed as a new schema",
-      "right": "DEV.MAPPINGS_APP.TBL_CFG_SETTINGS",
-      "why": "MAPPINGS_APP is the new canonical app schema; current DEV.MAPPING_APP is a grandfathered deployed schema."
+      "wrong": "PROD.MAPPINGS_APP.TBL_CFG_SETTINGS proposed as a new application schema",
+      "right": "PROD.STREAMLIT.TBL_CFG_MAPPING_SETTINGS",
+      "why": "New Streamlit app definitions and truly app-private configuration belong in STREAMLIT. Shared crosswalks stay in MAPPINGS; shared DATALAKE pipelines remain there. Existing DEV.MAPPING_APP and other deployed objects are not automatically relocated."
     },
     {
       "wrong": "TBL_MAP_SEI_ACCT_MAPPING",
@@ -706,6 +717,7 @@
       "client_layer",
       "source_origin_policy",
       "mapping_policy",
+      "streamlit_policy",
       "lifecycle_names",
       "type_change_rule",
       "pluralization_policy"
@@ -726,7 +738,7 @@
   ],
   "verification_pending": {
     "MODEL_ORIGIN": "Confirm which organization/system originally produces and calculates Model AUM Quarterly Summary; WCM sending the workbook is insufficient proof.",
-    "MAPPINGS_APP_DEPLOYMENT": "The target application schema name is MAPPINGS_APP. The observed DEV.MAPPING_APP remains as deployed until intentionally migrated."
+    "LEGACY_DEV_MAPPING_APP": "DEV.MAPPING_APP is observed as deployed but its active use and migration needs have not been verified by this document update; preserve deployed references unless separately reviewed."
   },
   "pluralization_policy": {
     "rule": "Datasets and collections take a plural subject (ACCOUNTS, MAPPINGS, VALUATIONS, MARKET_VALUES, STATUSES). Business measures and aggregate metrics remain singular (AUM, MARKET_VALUE when naming a single metric). Process actions remain singular. Use the explicit approved subject dictionary below for established exceptions.",
@@ -746,7 +758,7 @@
     "examples": {
       "schemas": [
         "PROD.MAPPINGS",
-        "PROD.MAPPINGS_APP"
+        "PROD.DATALAKE"
       ],
       "datasets": [
         "TBL_MAP_MODEL_ACCOUNTS",
